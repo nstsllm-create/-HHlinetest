@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>His and Hairs — ทดสอบ LINE</title>
+<style>
+body {
+margin: 0;
+padding: 24px;
+font-family: sans-serif;
+background: #f3f4f6;
+color: #222;
+}
+main {
+max-width: 480px;
+margin: 32px auto;
+padding: 24px;
+background: white;
+border-radius: 16px;
+}
+h1 { font-size: 24px; }
+p { line-height: 1.7; overflow-wrap: anywhere; }
+button {
+padding: 12px 20px;
+border: 0;
+border-radius: 8px;
+background: #06c755;
+color: white;
+font-size: 16px;
+cursor: pointer;
+}
+</style>
+</head>
+<body>
+<main>
+<h1>His and Hairs Booking</h1>
+<p>ทดสอบการเชื่อมต่อ LINE รุ่น D2</p>
+<p id="status" role="status">กำลังเริ่มตรวจ…</p>
+<p id="environment"></p>
+<button id="login" hidden>เข้าสู่ระบบ LINE</button>
+<p>หน้าทดสอบ ยังไม่เปิดรับจอง</p>
+</main>
+
+<script>
+const LIFF_ID = '2007513533-R2eJcQzQ';
+const statusBox = document.getElementById('status');
+const loginButton = document.getElementById('login');
+
+function withTimeout(promise, label) {
+return new Promise((resolve, reject) => {
+const timer = setTimeout(() => {
+reject(new Error(label + ' เกิน 20 วินาที'));
+}, 20000);
+
+Promise.resolve(promise).then(
+value => {
+clearTimeout(timer);
+resolve(value);
+},
+error => {
+clearTimeout(timer);
+reject(error);
+}
+);
+});
+}
+
+function loadSDK() {
+return new Promise((resolve, reject) => {
+const script = document.createElement('script');
+script.src = 'https://static.line-scdn.net/liff/edge/2/sdk.js';
+script.onload = () => {
+if (window.liff) {
+resolve();
+} else {
+reject(new Error('ไม่พบชุดเชื่อมต่อ LINE'));
+}
+};
+script.onerror = () => {
+reject(new Error('โหลดชุดเชื่อมต่อ LINE ไม่สำเร็จ'));
+};
+document.head.appendChild(script);
+});
+}
+
+async function start() {
+let step = 'โหลดชุดเชื่อมต่อ LINE';
+
+document.getElementById('environment').textContent =
+โดเมน: ' + location.hostname +
+ | อยู่ใน iframe: ' + (window.self !== window.top);
+
+try {
+statusBox.textContent = 'ขั้น 1: ' + step;
+await withTimeout(loadSDK(), step);
+
+step = 'เริ่มเชื่อมต่อ LIFF';
+statusBox.textContent = 'ขั้น 2: ' + step;
+await withTimeout(
+liff.init({ liffId: LIFF_ID }),
+step
+);
+
+if (!liff.isLoggedIn()) {
+statusBox.textContent =
+เริ่มเชื่อมต่อสำเร็จ กรุณากดเข้าสู่ระบบ LINE';
+loginButton.hidden = false;
+loginButton.onclick = () => {
+try {
+liff.login();
+} catch (error) {
+statusBox.textContent =
+เข้าสู่ระบบไม่สำเร็จ: ' +
+(error.message || String(error));
+}
+};
+return;
+}
+
+step = 'อ่านชื่อบัญชี LINE';
+statusBox.textContent = 'ขั้น 3: ' + step;
+
+const profile = await withTimeout(
+liff.getProfile(),
+step
+);
+
+statusBox.textContent =
+สำเร็จ: สวัสดีคุณ ' + profile.displayName;
+} catch (error) {
+statusBox.textContent =
+หยุดที่: ' + step + ' | ' +
+(error.message || String(error)) +
+ | รหัส: ' + (error.code || 'ไม่มี');
+}
+}
+
+start();
+</script>
+</body>
+</html>
