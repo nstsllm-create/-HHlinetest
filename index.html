@@ -21,10 +21,9 @@
       border-radius: 20px;
     }
     h1 { font-size: 26px; margin-top: 0; }
-    h2 { font-size: 20px; }
+    h2 { font-size: 20px; margin-top: 28px; }
     p { line-height: 1.7; }
-    .note { color: #666; font-size: 14px; }
-    label { display: block; margin: 20px 0 10px; }
+    label { display: block; margin: 16px 0 10px; }
     select, button {
       width: 100%;
       padding: 14px;
@@ -39,12 +38,15 @@
       color: white;
       cursor: pointer;
     }
-    [hidden] { display: none !important; }
-    #selection {
+    .note { color: #666; font-size: 14px; }
+    #summary {
+      margin-top: 24px;
+      padding: 18px;
       background: #f0fdf4;
-      padding: 16px;
-      border-radius: 10px;
+      border-radius: 12px;
     }
+    #summary p { margin: 8px 0; }
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body>
@@ -59,17 +61,32 @@
       <select id="branch">
         <option value="">กรุณาเลือกสาขา</option>
         <optgroup label="His and Hairs">
-          <option>His and Hairs — ศิรินครสแควร์</option>
-          <option>His and Hairs — หน้าค่ายวชิราวุธ</option>
-          <option>His and Hairs — วลัยลักษณ์</option>
+          <option value="hh-square">His and Hairs — ศิรินครสแควร์</option>
+          <option value="hh-camp">His and Hairs — หน้าค่ายวชิราวุธ</option>
+          <option value="hh-walailak">His and Hairs — วลัยลักษณ์</option>
         </optgroup>
         <optgroup label="BarberBoss">
-          <option>BarberBoss — หมู่บ้านเมืองทอง</option>
-          <option>BarberBoss — วลัยลักษณ์</option>
-          <option>BarberBoss — 7-Eleven ท่าแพ</option>
+          <option value="bb-muangthong">BarberBoss — หมู่บ้านเมืองทอง</option>
+          <option value="bb-walailak">BarberBoss — วลัยลักษณ์</option>
+          <option value="bb-thaphae">BarberBoss — 7-Eleven ท่าแพ</option>
         </optgroup>
       </select>
-      <p id="selection" role="status" hidden></p>
+
+      <section id="serviceSection" hidden>
+        <h2>2. เลือกบริการ</h2>
+        <label for="service">บริการและราคา</label>
+        <select id="service"></select>
+        <p class="note">ราคาปกติสำหรับทดสอบ ยังไม่รวมโปรโมชั่น</p>
+      </section>
+
+      <section id="summary" aria-live="polite" hidden>
+        <strong>รายการที่เลือก</strong>
+        <p id="summaryBranch"></p>
+        <p id="summaryService"></p>
+        <p id="summaryPrice"></p>
+        <p id="summaryDuration"></p>
+        <p class="note">ยังไม่ได้จองคิว ขั้นตอนเลือกช่างและวันเวลาจะเพิ่มต่อไป</p>
+      </section>
     </section>
 
     <p class="note">หน้าทดสอบ ยังไม่เปิดรับจองหรือรับชำระเงิน</p>
@@ -79,15 +96,77 @@
     const LIFF_ID = "2007513533-R2eJcQzQ";
     const statusBox = document.getElementById("status");
     const loginButton = document.getElementById("login");
-    const branch = document.getElementById("branch");
-    const selection = document.getElementById("selection");
+    const branchSelect = document.getElementById("branch");
+    const serviceSelect = document.getElementById("service");
+    const serviceSection = document.getElementById("serviceSection");
+    const summary = document.getElementById("summary");
 
-    branch.addEventListener("change", () => {
-      selection.hidden = !branch.value;
-      selection.textContent = branch.value
-        ? "เลือกแล้ว: " + branch.value +
-          " — ขั้นตอนเลือกบริการจะเพิ่มในลำดับถัดไป"
-        : "";
+    function haircut(price) {
+      return {
+        id: "cut-" + price,
+        name: "ตัดผม " + price + " บาท",
+        price: price,
+        minutes: 45
+      };
+    }
+
+    const chemicalServices = [
+      { id: "volume-straight", name: "ยืดวอลลุ่ม", price: 1500, minutes: 180 },
+      { id: "keratin", name: "เคราติน", price: 1800, minutes: 180 },
+      { id: "premium-straight", name: "ยืดพรีเมียม", price: 2000, minutes: 180 },
+      { id: "volume-perm", name: "ดัดวอลลุ่ม", price: 1500, minutes: 180 },
+      { id: "curly", name: "ดัดเคอร์ลี่", price: 1800, minutes: 180 },
+      { id: "foil", name: "ดัดฟอยล์", price: 1800, minutes: 180 },
+      { id: "rod-spiral", name: "ดัดแกน / สไปรัล", price: 1800, minutes: 180 },
+      { id: "grey-cover", name: "ปิดผมขาว", price: 600, minutes: 180 },
+      { id: "fashion-color", name: "ทำสีแฟชั่น", price: 2500, minutes: 180 }
+    ];
+
+    const servicesByBranch = {
+      "hh-square": [
+        haircut(300),
+        haircut(400),
+        haircut(500),
+        ...chemicalServices
+      ],
+      "hh-camp": [haircut(150), haircut(200)],
+      "hh-walailak": [haircut(150), haircut(200)],
+      "bb-muangthong": [haircut(100)],
+      "bb-walailak": [haircut(100)],
+      "bb-thaphae": [haircut(100)]
+    };
+
+    branchSelect.addEventListener("change", () => {
+      summary.hidden = true;
+      serviceSelect.replaceChildren(
+        new Option("กรุณาเลือกบริการ", "")
+      );
+
+      const services = servicesByBranch[branchSelect.value] || [];
+      serviceSection.hidden = services.length === 0;
+
+      services.forEach(service => {
+        const label = service.name +
+          " — " + service.price.toLocaleString("th-TH") + " บาท";
+        serviceSelect.add(new Option(label, service.id));
+      });
+    });
+
+    serviceSelect.addEventListener("change", () => {
+      const services = servicesByBranch[branchSelect.value] || [];
+      const service = services.find(item => item.id === serviceSelect.value);
+      summary.hidden = !service;
+      if (!service) return;
+
+      document.getElementById("summaryBranch").textContent =
+        branchSelect.selectedOptions[0].textContent;
+      document.getElementById("summaryService").textContent =
+        "บริการ: " + service.name;
+      document.getElementById("summaryPrice").textContent =
+        "ราคา: " + service.price.toLocaleString("th-TH") + " บาท";
+      document.getElementById("summaryDuration").textContent =
+        "ระยะเวลา: " +
+        (service.minutes === 180 ? "3 ชั่วโมง" : "45 นาที");
     });
 
     function withTimeout(promise, label) {
@@ -133,7 +212,7 @@
         );
 
         if (!liff.isLoggedIn()) {
-          statusBox.textContent = "กรุณาเข้าสู่ระบบ LINE เพื่อเลือกสาขา";
+          statusBox.textContent = "กรุณาเข้าสู่ระบบ LINE เพื่อเลือกบริการ";
           loginButton.hidden = false;
           loginButton.onclick = () => {
             try {
