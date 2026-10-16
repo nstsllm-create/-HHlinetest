@@ -3,48 +3,92 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>His and Hairs — ทดสอบ LINE</title>
+  <title>His and Hairs Booking</title>
   <style>
+    * { box-sizing: border-box; }
     body {
       margin: 0;
-      padding: 24px;
-      font-family: sans-serif;
+      padding: 20px;
+      font-family: system-ui, sans-serif;
       background: #f3f4f6;
       color: #222;
     }
     main {
-      max-width: 480px;
-      margin: 32px auto;
-      padding: 24px;
+      max-width: 520px;
+      margin: 24px auto;
+      padding: 28px;
       background: white;
-      border-radius: 16px;
+      border-radius: 20px;
     }
-    h1 { font-size: 24px; }
-    p { line-height: 1.7; overflow-wrap: anywhere; }
+    h1 { font-size: 26px; margin-top: 0; }
+    h2 { font-size: 20px; }
+    p { line-height: 1.7; }
+    .note { color: #666; font-size: 14px; }
+    label { display: block; margin: 20px 0 10px; }
+    select, button {
+      width: 100%;
+      padding: 14px;
+      font: inherit;
+      border-radius: 10px;
+    }
+    select { border: 1px solid #ccc; background: white; }
     button {
-      padding: 12px 20px;
+      margin-top: 16px;
       border: 0;
-      border-radius: 8px;
       background: #06c755;
       color: white;
-      font-size: 16px;
+      cursor: pointer;
+    }
+    [hidden] { display: none !important; }
+    #selection {
+      background: #f0fdf4;
+      padding: 16px;
+      border-radius: 10px;
     }
   </style>
 </head>
 <body>
   <main>
     <h1>His and Hairs Booking</h1>
-    <p>ทดสอบการเชื่อมต่อ LINE รุ่น D2</p>
-    <p id="status" role="status">กำลังเริ่มตรวจ…</p>
-    <p id="environment"></p>
+    <p id="status" role="status">กำลังเชื่อมต่อ LINE…</p>
     <button id="login" hidden>เข้าสู่ระบบ LINE</button>
-    <p>หน้าทดสอบ ยังไม่เปิดรับจอง</p>
+
+    <section id="booking" hidden>
+      <h2>1. เลือกสาขา</h2>
+      <label for="branch">สาขาที่ต้องการใช้บริการ</label>
+      <select id="branch">
+        <option value="">กรุณาเลือกสาขา</option>
+        <optgroup label="His and Hairs">
+          <option>His and Hairs — ศิรินครสแควร์</option>
+          <option>His and Hairs — หน้าค่ายวชิราวุธ</option>
+          <option>His and Hairs — วลัยลักษณ์</option>
+        </optgroup>
+        <optgroup label="BarberBoss">
+          <option>BarberBoss — หมู่บ้านเมืองทอง</option>
+          <option>BarberBoss — วลัยลักษณ์</option>
+          <option>BarberBoss — 7-Eleven ท่าแพ</option>
+        </optgroup>
+      </select>
+      <p id="selection" role="status" hidden></p>
+    </section>
+
+    <p class="note">หน้าทดสอบ ยังไม่เปิดรับจองหรือรับชำระเงิน</p>
   </main>
 
   <script>
     const LIFF_ID = "2007513533-R2eJcQzQ";
     const statusBox = document.getElementById("status");
     const loginButton = document.getElementById("login");
+    const branch = document.getElementById("branch");
+    const selection = document.getElementById("selection");
+
+    branch.addEventListener("change", () => {
+      selection.hidden = !branch.value;
+      selection.textContent = branch.value
+        ? "เลือกแล้ว: " + branch.value +
+          " — ขั้นตอนเลือกบริการจะเพิ่มในลำดับถัดไป"
+        : "";
+    });
 
     function withTimeout(promise, label) {
       return new Promise((resolve, reject) => {
@@ -68,77 +112,49 @@
     function loadSDK() {
       return new Promise((resolve, reject) => {
         const script = document.createElement("script");
-        script.src =
-          "https://static.line-scdn.net/liff/edge/2/sdk.js";
-
+        script.src = "https://static.line-scdn.net/liff/edge/2/sdk.js";
         script.onload = () => {
-          if (window.liff) {
-            resolve();
-          } else {
-            reject(new Error("ไม่พบชุดเชื่อมต่อ LINE"));
-          }
+          if (window.liff) resolve();
+          else reject(new Error("ไม่พบชุดเชื่อมต่อ LINE"));
         };
-
         script.onerror = () => {
           reject(new Error("โหลดชุดเชื่อมต่อ LINE ไม่สำเร็จ"));
         };
-
         document.head.appendChild(script);
       });
     }
 
     async function start() {
-      let step = "โหลดชุดเชื่อมต่อ LINE";
-
-      document.getElementById("environment").textContent =
-        "โดเมน: " + location.hostname +
-        " | อยู่ใน iframe: " + (window.self !== window.top);
-
       try {
-        statusBox.textContent = "ขั้น 1: " + step;
-        await withTimeout(loadSDK(), step);
-
-        step = "เริ่มเชื่อมต่อ LIFF";
-        statusBox.textContent = "ขั้น 2: " + step;
-
+        await withTimeout(loadSDK(), "โหลดชุดเชื่อมต่อ LINE");
         await withTimeout(
           liff.init({ liffId: LIFF_ID }),
-          step
+          "เชื่อมต่อ LIFF"
         );
 
         if (!liff.isLoggedIn()) {
-          statusBox.textContent =
-            "เริ่มเชื่อมต่อสำเร็จ กรุณากดเข้าสู่ระบบ LINE";
-
+          statusBox.textContent = "กรุณาเข้าสู่ระบบ LINE เพื่อเลือกสาขา";
           loginButton.hidden = false;
           loginButton.onclick = () => {
             try {
               liff.login();
             } catch (error) {
-              statusBox.textContent =
-                "เข้าสู่ระบบไม่สำเร็จ: " +
+              statusBox.textContent = "เข้าสู่ระบบไม่สำเร็จ: " +
                 (error.message || String(error));
             }
           };
           return;
         }
 
-        step = "อ่านชื่อบัญชี LINE";
-        statusBox.textContent = "ขั้น 3: " + step;
-
         const profile = await withTimeout(
           liff.getProfile(),
-          step
+          "อ่านชื่อบัญชี LINE"
         );
-
-        statusBox.textContent =
-          "สำเร็จ: สวัสดีคุณ " + profile.displayName;
-
+        statusBox.textContent = "สวัสดีคุณ " + profile.displayName;
+        document.getElementById("booking").hidden = false;
       } catch (error) {
-        statusBox.textContent =
-          "หยุดที่: " + step + " | " +
-          (error.message || String(error)) +
-          " | รหัส: " + (error.code || "ไม่มี");
+        statusBox.textContent = "เชื่อมต่อไม่สำเร็จ: " +
+          (error.message || String(error));
       }
     }
 
