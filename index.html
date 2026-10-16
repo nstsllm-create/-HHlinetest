@@ -239,5 +239,166 @@
 
     start();
   </script>
+  <script>
+(() => {
+  const branch = document.getElementById("branch");
+  const service = document.getElementById("service");
+  const summaryBox = document.getElementById("summary");
+
+  // รายชื่อสำหรับทดสอบ ยังไม่เชื่อมตารางเข้างาน
+  const haircutStaff = {
+    "hh-square": ["เท็น", "จิ๋ว", "ปังปอนด์"],
+    "hh-camp": ["โอเว่น", "เติ้ล", "เอ๋", "ดี", "ฟิล์ม"],
+    "hh-walailak": ["ดรีม", "ฟาฮัด", "ฮาฟิต"],
+    "bb-muangthong": ["โต้ง"],
+    "bb-walailak": ["อัสลาม", "บอม"],
+    "bb-thaphae": ["เอฟ"]
+  };
+
+  const chemicalStaff = ["นัด", "บี", "แอน", "เจนนี่"];
+
+  const section = document.createElement("section");
+  section.hidden = true;
+  section.innerHTML = `
+    <h2>3. เลือกช่าง</h2>
+    <p class="note">
+      รายชื่อทดสอบ ยังไม่ยืนยันการเข้างานและระดับราคาของช่าง
+    </p>
+    <label for="barber">ช่างที่ต้องการ</label>
+    <select id="barber"></select>
+
+    <h2>4. เลือกวันและเวลา</h2>
+    <label for="bookingDate">วันที่ต้องการ</label>
+    <input id="bookingDate" type="date"
+      style="width:100%;padding:14px;font:inherit;
+      border:1px solid #ccc;border-radius:10px;">
+
+    <label for="bookingTime">เวลาทดสอบ</label>
+    <select id="bookingTime"></select>
+    <p class="note">
+      เวลาตัวอย่าง ยังไม่ตรวจวันหยุด คิวซ้อน หรือจำนวนคิวที่เหลือ
+      เวลาทั้งหมดเป็นเวลาประเทศไทย
+    </p>
+    <p id="schedulePreview" role="status"
+      style="white-space:pre-line;line-height:1.8;"></p>
+  `;
+
+  summaryBox.before(section);
+
+  const barber = document.getElementById("barber");
+  const date = document.getElementById("bookingDate");
+  const time = document.getElementById("bookingTime");
+  const preview = document.getElementById("schedulePreview");
+
+  function todayBangkok() {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Bangkok",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).formatToParts(new Date());
+
+    const get = type => parts.find(p => p.type === type).value;
+    return get("year") + "-" + get("month") + "-" + get("day");
+  }
+
+  function selectedService() {
+    return (servicesByBranch[branch.value] || [])
+      .find(item => item.id === service.value);
+  }
+
+  function clock(minutes) {
+    return String(Math.floor(minutes / 60)).padStart(2, "0") +
+      ":" + String(minutes % 60).padStart(2, "0");
+  }
+
+  function resetSchedule() {
+    section.hidden = true;
+    barber.replaceChildren(new Option("กรุณาเลือกช่าง", ""));
+    time.replaceChildren(new Option("กรุณาเลือกเวลา", ""));
+    date.value = "";
+    preview.textContent = "";
+  }
+
+  function showPreview() {
+    preview.textContent = "";
+    if (!barber.value || !date.value || !time.value) return;
+
+    if (date.value < todayBangkok()) {
+      preview.textContent = "กรุณาเลือกวันที่ตั้งแต่วันนี้เป็นต้นไป";
+      return;
+    }
+
+    const start = new Date(date.value + "T" + time.value + ":00+07:00");
+    if (start.getTime() <= Date.now()) {
+      preview.textContent = "เวลานี้ผ่านไปแล้ว กรุณาเลือกเวลาใหม่";
+      return;
+    }
+
+    const chosen = selectedService();
+    if (!chosen) return;
+
+    const [hour, minute] = time.value.split(":").map(Number);
+    const end = clock(hour * 60 + minute + chosen.minutes);
+
+    preview.textContent =
+      "ตัวอย่างรายการที่เลือก\n" +
+      "ช่าง: " + barber.value + "\n" +
+      "วันที่: " + date.value.split("-").reverse().join("/") + "\n" +
+      "เวลา: " + time.value + "–" + end + " น.\n" +
+      "ยังไม่ได้จองหรือกันคิว";
+  }
+
+  branch.addEventListener("change", () => {
+    resetSchedule();
+
+    // แก้ชื่อบริการตัดผมที่มีราคาซ้ำ
+    const list = servicesByBranch[branch.value] || [];
+    Array.from(service.options).forEach(option => {
+      const item = list.find(s => s.id === option.value);
+      if (item && item.id.startsWith("cut-")) {
+        option.textContent =
+          "ตัดผม — " + item.price.toLocaleString("th-TH") + " บาท";
+      }
+    });
+  });
+
+  service.addEventListener("change", () => {
+    resetSchedule();
+    const chosen = selectedService();
+    if (!chosen) return;
+
+    const chemical = !chosen.id.startsWith("cut-");
+    const names = chemical
+      ? chemicalStaff
+      : (haircutStaff[branch.value] || []);
+
+    names.forEach(name => {
+      barber.add(new Option(name, name));
+    });
+
+    date.min = todayBangkok();
+
+    if (chemical) {
+      ["09:00", "13:00"].forEach(value => {
+        time.add(new Option(value + " น. — รอบทดสอบ", value));
+      });
+    } else {
+      // ตัวอย่างเวลาเริ่มทุก 45 นาที ภายใน 09:00–20:00
+      for (let minutes = 540; minutes + chosen.minutes <= 1200;
+           minutes += 45) {
+        const value = clock(minutes);
+        time.add(new Option(value + " น. — เวลาทดสอบ", value));
+      }
+    }
+
+    section.hidden = false;
+  });
+
+  barber.addEventListener("change", showPreview);
+  date.addEventListener("change", showPreview);
+  time.addEventListener("change", showPreview);
+})();
+</script>
 </body>
 </html>
