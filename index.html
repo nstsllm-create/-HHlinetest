@@ -24,13 +24,17 @@
     h2 { font-size: 20px; margin-top: 28px; }
     p { line-height: 1.7; }
     label { display: block; margin: 16px 0 10px; }
-    select, button {
+    select, input, button {
       width: 100%;
       padding: 14px;
       font: inherit;
       border-radius: 10px;
     }
-    select { border: 1px solid #ccc; background: white; }
+    select, input {
+      border: 1px solid #ccc;
+      background: white;
+      color: #222;
+    }
     button {
       margin-top: 16px;
       border: 0;
@@ -44,361 +48,325 @@
       padding: 18px;
       background: #f0fdf4;
       border-radius: 12px;
+      white-space: pre-line;
+      line-height: 1.8;
     }
-    #summary p { margin: 8px 0; }
     [hidden] { display: none !important; }
   </style>
 </head>
 <body>
-  <main>
-    <h1>His and Hairs Booking</h1>
-    <p id="status" role="status">กำลังเชื่อมต่อ LINE…</p>
-    <button id="login" hidden>เข้าสู่ระบบ LINE</button>
+<main>
+  <h1>His and Hairs Booking</h1>
+  <p id="status" role="status">กำลังเชื่อมต่อ LINE…</p>
+  <button id="login" hidden>เข้าสู่ระบบ LINE</button>
+  <p id="dataStatus" role="status"></p>
+  <button id="retry" hidden>ลองโหลดข้อมูลใหม่</button>
 
-    <section id="booking" hidden>
-      <h2>1. เลือกสาขา</h2>
-      <label for="branch">สาขาที่ต้องการใช้บริการ</label>
-      <select id="branch">
-        <option value="">กรุณาเลือกสาขา</option>
-        <optgroup label="His and Hairs">
-          <option value="hh-square">His and Hairs — ศิรินครสแควร์</option>
-          <option value="hh-camp">His and Hairs — หน้าค่ายวชิราวุธ</option>
-          <option value="hh-walailak">His and Hairs — วลัยลักษณ์</option>
-        </optgroup>
-        <optgroup label="BarberBoss">
-          <option value="bb-muangthong">BarberBoss — หมู่บ้านเมืองทอง</option>
-          <option value="bb-walailak">BarberBoss — วลัยลักษณ์</option>
-          <option value="bb-thaphae">BarberBoss — 7-Eleven ท่าแพ</option>
-        </optgroup>
-      </select>
+  <section id="booking" hidden>
+    <h2>1. เลือกสาขา</h2>
+    <label for="branch">สาขาที่ต้องการใช้บริการ</label>
+    <select id="branch"></select>
 
-      <section id="serviceSection" hidden>
-        <h2>2. เลือกบริการ</h2>
-        <label for="service">บริการและราคา</label>
-        <select id="service"></select>
-        <p class="note">ราคาปกติสำหรับทดสอบ ยังไม่รวมโปรโมชั่น</p>
-      </section>
-
-      <section id="summary" aria-live="polite" hidden>
-        <strong>รายการที่เลือก</strong>
-        <p id="summaryBranch"></p>
-        <p id="summaryService"></p>
-        <p id="summaryPrice"></p>
-        <p id="summaryDuration"></p>
-        <p class="note">ยังไม่ได้จองคิว ขั้นตอนเลือกช่างและวันเวลาจะเพิ่มต่อไป</p>
-      </section>
+    <section id="services" hidden>
+      <h2>2. เลือกบริการ</h2>
+      <label for="service">บริการและราคา</label>
+      <select id="service"></select>
+      <p class="note">ราคาตามฐานข้อมูล ยังไม่รวมโปรโมชั่น</p>
     </section>
 
-    <p class="note">หน้าทดสอบ ยังไม่เปิดรับจองหรือรับชำระเงิน</p>
-  </main>
+    <section id="schedule" hidden>
+      <h2>3. เลือกช่าง</h2>
+      <label for="barber">ช่างที่ต้องการ</label>
+      <select id="barber"></select>
+      <p class="note">
+        รายชื่อจากฐานข้อมูล ยังไม่ยืนยันตารางเข้างาน
+        และบริการที่ช่างแต่ละคนรับได้
+      </p>
 
-  <script>
-    const LIFF_ID = "2007513533-R2eJcQzQ";
-    const statusBox = document.getElementById("status");
-    const loginButton = document.getElementById("login");
-    const branchSelect = document.getElementById("branch");
-    const serviceSelect = document.getElementById("service");
-    const serviceSection = document.getElementById("serviceSection");
-    const summary = document.getElementById("summary");
+      <h2>4. เลือกวันและเวลา</h2>
+      <label for="date">วันที่ต้องการ</label>
+      <input id="date" type="date">
 
-    function haircut(price) {
-      return {
-        id: "cut-" + price,
-        name: "ตัดผม " + price + " บาท",
-        price: price,
-        minutes: 45
-      };
-    }
+      <label for="time">เวลาตัวอย่างสำหรับทดสอบ</label>
+      <select id="time"></select>
+      <p class="note">
+        ยังไม่ตรวจคิวว่าง วันหยุด หรือจำนวนคิวที่เหลือ
+        เวลาทั้งหมดเป็นเวลาประเทศไทย
+      </p>
+    </section>
 
-    const chemicalServices = [
-      { id: "volume-straight", name: "ยืดวอลลุ่ม", price: 1500, minutes: 180 },
-      { id: "keratin", name: "เคราติน", price: 1800, minutes: 180 },
-      { id: "premium-straight", name: "ยืดพรีเมียม", price: 2000, minutes: 180 },
-      { id: "volume-perm", name: "ดัดวอลลุ่ม", price: 1500, minutes: 180 },
-      { id: "curly", name: "ดัดเคอร์ลี่", price: 1800, minutes: 180 },
-      { id: "foil", name: "ดัดฟอยล์", price: 1800, minutes: 180 },
-      { id: "rod-spiral", name: "ดัดแกน / สไปรัล", price: 1800, minutes: 180 },
-      { id: "grey-cover", name: "ปิดผมขาว", price: 600, minutes: 180 },
-      { id: "fashion-color", name: "ทำสีแฟชั่น", price: 2500, minutes: 180 }
-    ];
+    <div id="summary" role="status" hidden></div>
+  </section>
 
-    const servicesByBranch = {
-      "hh-square": [
-        haircut(300),
-        haircut(400),
-        haircut(500),
-        ...chemicalServices
-      ],
-      "hh-camp": [haircut(150), haircut(200)],
-      "hh-walailak": [haircut(150), haircut(200)],
-      "bb-muangthong": [haircut(100)],
-      "bb-walailak": [haircut(100)],
-      "bb-thaphae": [haircut(100)]
-    };
+  <p class="note">
+    หน้าทดสอบ ยังไม่บันทึกการจองหรือรับชำระเงิน
+  </p>
+</main>
 
-    branchSelect.addEventListener("change", () => {
-      summary.hidden = true;
-      serviceSelect.replaceChildren(
-        new Option("กรุณาเลือกบริการ", "")
-      );
+<script>
+const LIFF_ID = "2007513533-R2eJcQzQ";
+const API_URL =
+  "https://script.google.com/macros/s/AKfycbzF1clYVoU6fhE7qOsv1oOs-XS-_G-fYwtJ-G_aAto-PefaQcCjbMR6cDpjrYCQGexi/exec";
 
-      const services = servicesByBranch[branchSelect.value] || [];
-      serviceSection.hidden = services.length === 0;
+const el = id => document.getElementById(id);
+let catalog = null;
 
-      services.forEach(service => {
-        const label = service.name +
-          " — " + service.price.toLocaleString("th-TH") + " บาท";
-        serviceSelect.add(new Option(label, service.id));
-      });
-    });
+function resetSelect(id, label) {
+  el(id).replaceChildren(new Option(label, ""));
+}
 
-    serviceSelect.addEventListener("change", () => {
-      const services = servicesByBranch[branchSelect.value] || [];
-      const service = services.find(item => item.id === serviceSelect.value);
-      summary.hidden = !service;
-      if (!service) return;
+function todayBangkok() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date());
+  const get = type => parts.find(p => p.type === type).value;
+  return get("year") + "-" + get("month") + "-" + get("day");
+}
 
-      document.getElementById("summaryBranch").textContent =
-        branchSelect.selectedOptions[0].textContent;
-      document.getElementById("summaryService").textContent =
-        "บริการ: " + service.name;
-      document.getElementById("summaryPrice").textContent =
-        "ราคา: " + service.price.toLocaleString("th-TH") + " บาท";
-      document.getElementById("summaryDuration").textContent =
-        "ระยะเวลา: " +
-        (service.minutes === 180 ? "3 ชั่วโมง" : "45 นาที");
-    });
+function clock(minutes) {
+  return String(Math.floor(minutes / 60)).padStart(2, "0") +
+    ":" + String(minutes % 60).padStart(2, "0");
+}
 
-    function withTimeout(promise, label) {
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-          reject(new Error(label + " เกิน 20 วินาที"));
-        }, 20000);
+function chosenService() {
+  return catalog?.services.find(item =>
+    item.branchId === el("branch").value &&
+    item.id === el("service").value
+  );
+}
 
-        Promise.resolve(promise).then(
-          value => {
-            clearTimeout(timer);
-            resolve(value);
-          },
-          error => {
-            clearTimeout(timer);
-            reject(error);
-          }
-        );
-      });
-    }
+function isHaircut(item) {
+  return item.name.startsWith("ตัดผม");
+}
 
-    function loadSDK() {
-      return new Promise((resolve, reject) => {
-        const script = document.createElement("script");
-        script.src = "https://static.line-scdn.net/liff/edge/2/sdk.js";
-        script.onload = () => {
-          if (window.liff) resolve();
-          else reject(new Error("ไม่พบชุดเชื่อมต่อ LINE"));
-        };
-        script.onerror = () => {
-          reject(new Error("โหลดชุดเชื่อมต่อ LINE ไม่สำเร็จ"));
-        };
-        document.head.appendChild(script);
-      });
-    }
+function resetSchedule() {
+  el("schedule").hidden = true;
+  el("summary").hidden = true;
+  el("date").value = "";
+  resetSelect("barber", "กรุณาเลือกช่าง");
+  resetSelect("time", "กรุณาเลือกเวลา");
+}
 
-    async function start() {
-      try {
-        await withTimeout(loadSDK(), "โหลดชุดเชื่อมต่อ LINE");
-        await withTimeout(
-          liff.init({ liffId: LIFF_ID }),
-          "เชื่อมต่อ LIFF"
-        );
+el("branch").addEventListener("change", () => {
+  resetSchedule();
+  resetSelect("service", "กรุณาเลือกบริการ");
+  const items = catalog.services.filter(item =>
+    item.branchId === el("branch").value
+  );
+  el("services").hidden = !el("branch").value;
 
-        if (!liff.isLoggedIn()) {
-          statusBox.textContent = "กรุณาเข้าสู่ระบบ LINE เพื่อเลือกบริการ";
-          loginButton.hidden = false;
-          loginButton.onclick = () => {
-            try {
-              liff.login();
-            } catch (error) {
-              statusBox.textContent = "เข้าสู่ระบบไม่สำเร็จ: " +
-                (error.message || String(error));
-            }
-          };
-          return;
-        }
-
-        const profile = await withTimeout(
-          liff.getProfile(),
-          "อ่านชื่อบัญชี LINE"
-        );
-        statusBox.textContent = "สวัสดีคุณ " + profile.displayName;
-        document.getElementById("booking").hidden = false;
-      } catch (error) {
-        statusBox.textContent = "เชื่อมต่อไม่สำเร็จ: " +
-          (error.message || String(error));
-      }
-    }
-
-    start();
-  </script>
-  <script>
-(() => {
-  const branch = document.getElementById("branch");
-  const service = document.getElementById("service");
-  const summaryBox = document.getElementById("summary");
-
-  // รายชื่อสำหรับทดสอบ ยังไม่เชื่อมตารางเข้างาน
-  const haircutStaff = {
-    "hh-square": ["เท็น", "จิ๋ว", "ปังปอนด์"],
-    "hh-camp": ["โอเว่น", "เติ้ล", "เอ๋", "ดี", "ฟิล์ม"],
-    "hh-walailak": ["ดรีม", "ฟาฮัด", "ฮาฟิต"],
-    "bb-muangthong": ["โต้ง"],
-    "bb-walailak": ["อัสลาม", "บอม"],
-    "bb-thaphae": ["เอฟ"]
-  };
-
-  const chemicalStaff = ["นัด", "บี", "แอน", "เจนนี่"];
-
-  const section = document.createElement("section");
-  section.hidden = true;
-  section.innerHTML = `
-    <h2>3. เลือกช่าง</h2>
-    <p class="note">
-      รายชื่อทดสอบ ยังไม่ยืนยันการเข้างานและระดับราคาของช่าง
-    </p>
-    <label for="barber">ช่างที่ต้องการ</label>
-    <select id="barber"></select>
-
-    <h2>4. เลือกวันและเวลา</h2>
-    <label for="bookingDate">วันที่ต้องการ</label>
-    <input id="bookingDate" type="date"
-      style="width:100%;padding:14px;font:inherit;
-      border:1px solid #ccc;border-radius:10px;">
-
-    <label for="bookingTime">เวลาทดสอบ</label>
-    <select id="bookingTime"></select>
-    <p class="note">
-      เวลาตัวอย่าง ยังไม่ตรวจวันหยุด คิวซ้อน หรือจำนวนคิวที่เหลือ
-      เวลาทั้งหมดเป็นเวลาประเทศไทย
-    </p>
-    <p id="schedulePreview" role="status"
-      style="white-space:pre-line;line-height:1.8;"></p>
-  `;
-
-  summaryBox.before(section);
-
-  const barber = document.getElementById("barber");
-  const date = document.getElementById("bookingDate");
-  const time = document.getElementById("bookingTime");
-  const preview = document.getElementById("schedulePreview");
-
-  function todayBangkok() {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone: "Asia/Bangkok",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit"
-    }).formatToParts(new Date());
-
-    const get = type => parts.find(p => p.type === type).value;
-    return get("year") + "-" + get("month") + "-" + get("day");
-  }
-
-  function selectedService() {
-    return (servicesByBranch[branch.value] || [])
-      .find(item => item.id === service.value);
-  }
-
-  function clock(minutes) {
-    return String(Math.floor(minutes / 60)).padStart(2, "0") +
-      ":" + String(minutes % 60).padStart(2, "0");
-  }
-
-  function resetSchedule() {
-    section.hidden = true;
-    barber.replaceChildren(new Option("กรุณาเลือกช่าง", ""));
-    time.replaceChildren(new Option("กรุณาเลือกเวลา", ""));
-    date.value = "";
-    preview.textContent = "";
-  }
-
-  function showPreview() {
-    preview.textContent = "";
-    if (!barber.value || !date.value || !time.value) return;
-
-    if (date.value < todayBangkok()) {
-      preview.textContent = "กรุณาเลือกวันที่ตั้งแต่วันนี้เป็นต้นไป";
-      return;
-    }
-
-    const start = new Date(date.value + "T" + time.value + ":00+07:00");
-    if (start.getTime() <= Date.now()) {
-      preview.textContent = "เวลานี้ผ่านไปแล้ว กรุณาเลือกเวลาใหม่";
-      return;
-    }
-
-    const chosen = selectedService();
-    if (!chosen) return;
-
-    const [hour, minute] = time.value.split(":").map(Number);
-    const end = clock(hour * 60 + minute + chosen.minutes);
-
-    preview.textContent =
-      "ตัวอย่างรายการที่เลือก\n" +
-      "ช่าง: " + barber.value + "\n" +
-      "วันที่: " + date.value.split("-").reverse().join("/") + "\n" +
-      "เวลา: " + time.value + "–" + end + " น.\n" +
-      "ยังไม่ได้จองหรือกันคิว";
-  }
-
-  branch.addEventListener("change", () => {
-    resetSchedule();
-
-    // แก้ชื่อบริการตัดผมที่มีราคาซ้ำ
-    const list = servicesByBranch[branch.value] || [];
-    Array.from(service.options).forEach(option => {
-      const item = list.find(s => s.id === option.value);
-      if (item && item.id.startsWith("cut-")) {
-        option.textContent =
-          "ตัดผม — " + item.price.toLocaleString("th-TH") + " บาท";
-      }
-    });
+  items.forEach(item => {
+    const name = isHaircut(item) ? "ตัดผม" : item.name;
+    el("service").add(new Option(
+      name + " — " + item.price.toLocaleString("th-TH") + " บาท",
+      item.id
+    ));
   });
 
-  service.addEventListener("change", () => {
-    resetSchedule();
-    const chosen = selectedService();
-    if (!chosen) return;
+  if (el("branch").value && !items.length) {
+    resetSelect("service", "ยังไม่มีบริการสำหรับสาขานี้");
+  }
+});
 
-    const chemical = !chosen.id.startsWith("cut-");
-    const names = chemical
-      ? chemicalStaff
-      : (haircutStaff[branch.value] || []);
+el("service").addEventListener("change", () => {
+  resetSchedule();
+  const item = chosenService();
+  if (!item) return;
 
-    names.forEach(name => {
-      barber.add(new Option(name, name));
-    });
+  const role = isHaircut(item) ? "BARBER" : "CHEMICAL_STYLIST";
+  const staff = catalog.staff.filter(person =>
+    person.branchId === el("branch").value &&
+    person.role === role
+  );
 
-    date.min = todayBangkok();
+  staff.forEach(person => {
+    el("barber").add(new Option(person.name, person.id));
+  });
 
-    if (chemical) {
-      ["09:00", "13:00"].forEach(value => {
-        time.add(new Option(value + " น. — รอบทดสอบ", value));
-      });
+  if (!staff.length) {
+    resetSelect("barber", "ยังไม่มีรายชื่อช่างสำหรับบริการนี้");
+  }
+
+  el("date").min = todayBangkok();
+
+  const starts = [];
+  if (isHaircut(item)) {
+    for (let minute = 540; minute + item.minutes <= 1200;
+         minute += 15) {
+      starts.push(minute);
+    }
+  } else {
+    starts.push(540, 780);
+  }
+
+  starts.forEach(minute => {
+    el("time").add(new Option(
+      clock(minute) + " น. — เวลาทดสอบ",
+      clock(minute)
+    ));
+  });
+
+  el("schedule").hidden = false;
+  renderSummary();
+});
+
+function renderSummary() {
+  const item = chosenService();
+  el("summary").hidden = !item;
+  if (!item) return;
+
+  const branch = catalog.branches.find(b =>
+    b.id === el("branch").value
+  );
+  const person = catalog.staff.find(p =>
+    p.id === el("barber").value &&
+    p.branchId === el("branch").value
+  );
+
+  const lines = [
+    "รายการที่เลือก",
+    branch.name,
+    "บริการ: " + (isHaircut(item) ? "ตัดผม" : item.name),
+    "ราคา: " + item.price.toLocaleString("th-TH") + " บาท",
+    "ระยะเวลา: " + item.minutes + " นาที"
+  ];
+
+  if (person) lines.push("ช่าง: " + person.name);
+
+  const date = el("date").value;
+  const time = el("time").value;
+
+  if (date) {
+    lines.push("วันที่: " + date.split("-").reverse().join("/"));
+  }
+
+  if (date && time) {
+    const start = new Date(date + "T" + time + ":00+07:00");
+    if (date < todayBangkok() || start.getTime() <= Date.now()) {
+      lines.push("เวลานี้ผ่านไปแล้ว กรุณาเลือกใหม่");
     } else {
-      // ตัวอย่างเวลาเริ่มทุก 45 นาที ภายใน 09:00–20:00
-      for (let minutes = 540; minutes + chosen.minutes <= 1200;
-           minutes += 45) {
-        const value = clock(minutes);
-        time.add(new Option(value + " น. — เวลาทดสอบ", value));
-      }
+      const [hour, minute] = time.split(":").map(Number);
+      lines.push(
+        "เวลาทดสอบ: " + time + "–" +
+        clock(hour * 60 + minute + item.minutes) + " น."
+      );
+    }
+  }
+
+  lines.push("ยังไม่ได้จองหรือกันคิว");
+  el("summary").textContent = lines.join("\n");
+}
+
+["barber", "date", "time"].forEach(id => {
+  el(id).addEventListener("change", renderSummary);
+});
+
+async function loadCatalog() {
+  el("booking").hidden = true;
+  el("retry").hidden = true;
+  el("dataStatus").textContent = "กำลังอ่านข้อมูลจาก Google Sheets…";
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+
+  try {
+    const response = await fetch(API_URL + "?action=catalog", {
+      signal: controller.signal,
+      credentials: "omit",
+      redirect: "follow"
+    });
+    if (!response.ok) throw new Error("HTTP " + response.status);
+
+    const result = await response.json();
+    if (!result.ok) throw new Error(result.message || "อ่านข้อมูลไม่ได้");
+
+    const data = result.data;
+    if (!data || !Array.isArray(data.branches) ||
+        !Array.isArray(data.services) || !Array.isArray(data.staff)) {
+      throw new Error("รูปแบบข้อมูลไม่ถูกต้อง");
     }
 
-    section.hidden = false;
-  });
+    catalog = data;
+    resetSelect("branch", "กรุณาเลือกสาขา");
+    resetSelect("service", "กรุณาเลือกบริการ");
+    resetSchedule();
+    el("services").hidden = true;
 
-  barber.addEventListener("change", showPreview);
-  date.addEventListener("change", showPreview);
-  time.addEventListener("change", showPreview);
-})();
+    catalog.branches.forEach(branch => {
+      el("branch").add(new Option(branch.name, branch.id));
+    });
+
+    el("dataStatus").textContent =
+      "อ่านข้อมูลสำเร็จ: " + catalog.branches.length + " สาขา";
+    el("booking").hidden = false;
+  } catch (error) {
+    el("dataStatus").textContent =
+      "อ่านข้อมูลไม่สำเร็จ: " +
+      (error.name === "AbortError"
+        ? "ใช้เวลาเกิน 30 วินาที"
+        : error.message);
+    el("retry").hidden = false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+el("retry").onclick = loadCatalog;
+
+function withTimeout(promise, label) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(label + " เกิน 20 วินาที"));
+    }, 20000);
+    Promise.resolve(promise).then(
+      value => { clearTimeout(timer); resolve(value); },
+      error => { clearTimeout(timer); reject(error); }
+    );
+  });
+}
+
+function loadSDK() {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://static.line-scdn.net/liff/edge/2/sdk.js";
+    script.onload = () => window.liff
+      ? resolve()
+      : reject(new Error("ไม่พบชุดเชื่อมต่อ LINE"));
+    script.onerror = () => reject(new Error("โหลด LINE SDK ไม่สำเร็จ"));
+    document.head.appendChild(script);
+  });
+}
+
+async function start() {
+  try {
+    await withTimeout(loadSDK(), "โหลด LINE SDK");
+    await withTimeout(liff.init({ liffId: LIFF_ID }), "เชื่อมต่อ LIFF");
+
+    if (!liff.isLoggedIn()) {
+      el("status").textContent = "กรุณาเข้าสู่ระบบ LINE";
+      el("login").hidden = false;
+      el("login").onclick = () => {
+        try {
+          liff.login();
+        } catch (error) {
+          el("status").textContent = "เข้าสู่ระบบไม่สำเร็จ: " + error.message;
+        }
+      };
+      return;
+    }
+
+    const profile = await withTimeout(liff.getProfile(), "อ่านชื่อ LINE");
+    el("status").textContent = "สวัสดีคุณ " + profile.displayName;
+    await loadCatalog();
+  } catch (error) {
+    el("status").textContent = "เชื่อมต่อไม่สำเร็จ: " + error.message;
+  }
+}
+
+start();
 </script>
 </body>
 </html>
