@@ -536,5 +536,75 @@ async function start() {
 
 start();
 </script>
-</body>
+<script>
+(() => {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = "ทดสอบยืนยันบัญชี LINE";
+  const message = document.createElement("p");
+  message.setAttribute("role", "status");
+
+  const status = document.getElementById("status");
+  status.after(button, message);
+
+  button.onclick = async () => {
+    if (!window.liff || !liff.isLoggedIn()) {
+      message.textContent = "กรุณาเข้าสู่ระบบ LINE ให้สำเร็จก่อน";
+      return;
+    }
+
+    const idToken = liff.getIDToken();
+    if (!idToken) {
+      message.textContent =
+        "ไม่พบโทเคน กรุณาปิดหน้านี้แล้วเปิดจาก LINE ใหม่";
+      return;
+    }
+
+    button.disabled = true;
+    message.textContent = "กำลังยืนยันบัญชีกับเซิร์ฟเวอร์…";
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
+
+    try {
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain;charset=UTF-8"
+        },
+        credentials: "omit",
+        redirect: "follow",
+        signal: controller.signal,
+        body: JSON.stringify({
+          action: "verify-line",
+          idToken: idToken
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("HTTP " + response.status);
+      }
+
+      const result = await response.json();
+      if (!result.ok || result.data?.verified !== true) {
+        throw new Error(result.message || "ยืนยันบัญชีไม่สำเร็จ");
+      }
+
+      message.textContent =
+        "เซิร์ฟเวอร์ยืนยันบัญชีสำเร็จ" +
+        (result.data.displayName
+          ? ": " + result.data.displayName : "") +
+        " — ยังไม่ได้สร้างคิว";
+    } catch (error) {
+      message.textContent =
+        error.name === "AbortError"
+          ? "ใช้เวลาเกิน 30 วินาที กรุณาลองใหม่"
+          : "ยืนยันไม่สำเร็จ: " + error.message;
+    } finally {
+      clearTimeout(timer);
+      button.disabled = false;
+    }
+  };
+})();
+</script></body>
 </html>
