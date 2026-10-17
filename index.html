@@ -53,7 +53,9 @@
     }
     [hidden] { display: none !important; }
   </style>
-</head> <script>
+</head>
+<script>
+window.addEventListener("DOMContentLoaded", () => {
 (() => {
   const timeSelect = document.getElementById("time");
   const dateInput = document.getElementById("date");
@@ -219,8 +221,8 @@
   barberSelect.addEventListener("change", refreshTimes);
   dateInput.addEventListener("change", refreshTimes);
 
-  clearTimes("");
-})();
+    clearTimes("");
+});
 </script>
 <body>
 <main>
