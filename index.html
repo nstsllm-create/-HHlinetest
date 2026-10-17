@@ -606,5 +606,212 @@ start();
     }
   };
 })();
+</script> <script>
+(() => {
+  const summaryBox = document.getElementById('summary');
+  const fields = ['branch', 'service', 'barber', 'date', 'time']
+    .map(id => document.getElementById(id));
+
+  if (!summaryBox || fields.some(field => !field)) return;
+  if (document.getElementById('holdTestButton')) return;
+
+  const panel = document.createElement('section');
+  panel.hidden = true;
+
+  const button = document.createElement('button');
+  button.id = 'holdTestButton';
+  button.type = 'button';
+  button.textContent = 'กันคิวทดสอบ 10 นาที';
+
+  const message = document.createElement('p');
+  message.setAttribute('role', 'status');
+  message.style.whiteSpace = 'pre-line';
+
+  const note = document.createElement('p');
+  note.className = 'note';
+  note.textContent =
+    'สำหรับทดสอบระบบ ยังไม่ใช่การยืนยันนัดหมายหรือชำระเงิน';
+
+  panel.append(button, message, note);
+  summaryBox.after(panel);
+
+  const requestIds = new Map();
+  let busy = false;
+  let expiresAt = 0;
+  let heldMessage = '';
+
+  function selection() {
+    return {
+      branchId: fields[0].value,
+      serviceId: fields[1].value,
+      staffId: fields[2].value,
+      date: fields[3].value,
+      time: fields[4].value
+    };
+  }
+
+  function ready() {
+    return Object.values(selection()).every(Boolean) &&
+      !fields[4].disabled;
+  }
+
+  function update() {
+    const holding = expiresAt > Date.now();
+
+    panel.hidden = !ready() && !busy && !holding;
+    button.disabled = busy || holding || !ready();
+
+    button.textContent = holding
+      ? 'กันคิวทดสอบไว้แล้ว'
+      : 'กันคิวทดสอบ 10 นาที';
+
+    if (holding) message.textContent = heldMessage;
+  }
+
+  function newRequestId() {
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    return 'TEST-' + Array.from(bytes, value =>
+      value.toString(16).padStart(2, '0')
+    ).join('');
+  }
+
+  fields.forEach(field => {
+    field.addEventListener('change', () => {
+      if (!busy && expiresAt <= Date.now()) {
+        message.textContent = '';
+      }
+      update();
+    });
+  });
+
+  new MutationObserver(update).observe(fields[4], {
+    childList: true,
+    attributes: true,
+    attributeFilter: ['disabled']
+  });
+
+  button.addEventListener('click', async () => {
+    if (busy || !ready() || expiresAt > Date.now()) return;
+
+    if (!window.liff || !liff.isLoggedIn()) {
+      message.textContent = 'กรุณาเข้าสู่ระบบ LINE ก่อน';
+      return;
+    }
+
+    const idToken = liff.getIDToken();
+
+    if (!idToken) {
+      message.textContent =
+        'ไม่พบข้อมูลยืนยันบัญชี กรุณาปิดแล้วเปิดลิงก์ LINE ใหม่';
+      return;
+    }
+
+    const selected = selection();
+    const key = JSON.stringify(selected);
+
+    if (!requestIds.has(key)) {
+      requestIds.set(key, newRequestId());
+    }
+
+    const originalDisabled = fields.map(field => field.disabled);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
+
+    busy = true;
+    fields.forEach(field => { field.disabled = true; });
+    button.disabled = true;
+    message.textContent = 'กำลังตรวจและกันคิวทดสอบ…';
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=UTF-8'
+        },
+        credentials: 'omit',
+        redirect: 'follow',
+        signal: controller.signal,
+        body: JSON.stringify({
+          action: 'hold-test',
+          idToken: idToken,
+          requestId: requestIds.get(key),
+          ...selected
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('เซิร์ฟเวอร์ตอบกลับไม่สำเร็จ');
+      }
+
+      const result = await response.json();
+
+      if (!result.ok) {
+        requestIds.delete(key);
+        throw new Error(result.message || 'กันคิวทดสอบไม่สำเร็จ');
+      }
+
+      const data = result.data;
+      const expiry = Date.parse(data && data.expiresAt);
+
+      if (
+        !data ||
+        data.testOnly !== true ||
+        typeof data.reservationId !== 'string' ||
+        !Number.isFinite(expiry)
+      ) {
+        throw new Error('ข้อมูลตอบกลับไม่ครบ กรุณาลองอีกครั้ง');
+      }
+
+      expiresAt = expiry;
+
+      const expiryText = new Intl.DateTimeFormat('th-TH', {
+        timeZone: 'Asia/Bangkok',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      }).format(new Date(expiry));
+
+      heldMessage =
+        'กันคิวทดสอบสำเร็จ\n' +
+        'รหัส: ' + data.reservationId + '\n' +
+        'หมดอายุเวลา ' + expiryText + ' น.\n' +
+        'ยังไม่ได้ยืนยันนัดหมายหรือชำระเงิน';
+
+      message.textContent = heldMessage;
+    } catch (error) {
+      message.textContent = error.name === 'AbortError'
+        ? 'รอเกิน 30 วินาที ยังไม่ทราบผล กรุณากดซ้ำเพื่อตรวจคำขอเดิม'
+        : (error.message || 'เชื่อมต่อไม่สำเร็จ กรุณาลองอีกครั้ง');
+    } finally {
+      clearTimeout(timer);
+      busy = false;
+
+      fields.forEach((field, index) => {
+        field.disabled = originalDisabled[index];
+      });
+
+      update();
+    }
+  });
+
+  setInterval(() => {
+    if (expiresAt && expiresAt <= Date.now()) {
+      expiresAt = 0;
+      requestIds.clear();
+      message.textContent =
+        'คิวทดสอบหมดอายุแล้ว กรุณาเลือกเวลาใหม่เพื่อตรวจคิวว่าง';
+
+      fields[4].replaceChildren(
+        new Option('กรุณาตรวจเวลาใหม่', '')
+      );
+      fields[4].disabled = true;
+      fields[3].dispatchEvent(new Event('change'));
+      update();
+    }
+  }, 1000);
+
+  update();
+})();
 </script></body>
 </html>
