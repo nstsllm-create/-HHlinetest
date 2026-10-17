@@ -53,7 +53,175 @@
     }
     [hidden] { display: none !important; }
   </style>
-</head>
+</head> <script>
+(() => {
+  const timeSelect = document.getElementById("time");
+  const dateInput = document.getElementById("date");
+  const barberSelect = document.getElementById("barber");
+  const branchSelect = document.getElementById("branch");
+  const serviceSelect = document.getElementById("service");
+
+  const notice = document.createElement("p");
+  notice.className = "note";
+  notice.setAttribute("role", "status");
+  timeSelect.after(notice);
+
+  document.querySelector('label[for="time"]').textContent =
+    "เวลาที่ผ่านการตรวจจากตารางทดสอบ";
+
+  let requestNumber = 0;
+  let activeController = null;
+
+  function clearTimes(message) {
+    requestNumber++;
+
+    if (activeController) {
+      activeController.abort();
+      activeController = null;
+    }
+
+    timeSelect.replaceChildren(
+      new Option("กรุณาเลือกช่างและวันที่ก่อน", "")
+    );
+    timeSelect.disabled = true;
+    notice.textContent = message || "";
+    renderSummary();
+  }
+
+  async function refreshTimes() {
+    clearTimes("");
+
+    const service = chosenService();
+    const date = dateInput.value;
+    const staffId = barberSelect.value;
+    const branchId = branchSelect.value;
+
+    if (!service || !date || !staffId) return;
+
+    if (!isHaircut(service)) {
+      notice.textContent =
+        "ขั้นนี้ตรวจตารางได้เฉพาะบริการตัดผม";
+      return;
+    }
+
+    if (date < todayBangkok()) {
+      notice.textContent = "กรุณาเลือกวันที่ตั้งแต่วันนี้เป็นต้นไป";
+      return;
+    }
+
+    const currentRequest = requestNumber;
+    const controller = new AbortController();
+    activeController = controller;
+
+    timeSelect.replaceChildren(
+      new Option("กำลังตรวจเวลา…", "")
+    );
+    notice.textContent = "กำลังตรวจตารางงานและรายการคิว…";
+
+    const timer = setTimeout(() => controller.abort(), 30000);
+
+    try {
+      const params = new URLSearchParams({
+        action: "availability-test",
+        date: date,
+        branchId: branchId,
+        staffId: staffId,
+        serviceId: service.id
+      });
+
+      const response = await fetch(API_URL + "?" + params.toString(), {
+        signal: controller.signal,
+        credentials: "omit",
+        redirect: "follow"
+      });
+
+      if (!response.ok) {
+        throw new Error("HTTP " + response.status);
+      }
+
+      const result = await response.json();
+
+      // ป้องกันผลคำขอเก่าทับรายการที่เพิ่งเลือกใหม่
+      if (currentRequest !== requestNumber) return;
+
+      if (!result.ok) {
+        throw new Error(result.message || "ตรวจเวลาไม่สำเร็จ");
+      }
+
+      const data = result.data;
+      if (!data || data.testOnly !== true ||
+          data.date !== date || data.staffId !== staffId ||
+          !Array.isArray(data.slots)) {
+        throw new Error("รูปแบบผลตรวจเวลาไม่ถูกต้อง");
+      }
+
+      const validTime = value =>
+        typeof value === "string" &&
+        /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+
+      if (!data.slots.every(slot =>
+        slot && validTime(slot.start) && validTime(slot.end)
+      )) {
+        throw new Error("รูปแบบเวลาไม่ถูกต้อง");
+      }
+
+      const now = Date.now();
+      const slots = data.slots.filter(slot =>
+        new Date(date + "T" + slot.start + ":00+07:00").getTime() > now
+      );
+
+      timeSelect.replaceChildren(
+        new Option(
+          slots.length ? "กรุณาเลือกเวลา" : "ไม่พบเวลาตามตารางทดสอบ",
+          ""
+        )
+      );
+
+      slots.forEach(slot => {
+        timeSelect.add(new Option(
+          slot.start + "–" + slot.end + " น.",
+          slot.start
+        ));
+      });
+
+      timeSelect.disabled = slots.length === 0;
+      notice.textContent = slots.length
+        ? "ตรวจพบ " + slots.length +
+          " เวลาเริ่มที่เลือกได้ ยังไม่ได้กันคิว"
+        : "ไม่พบเวลาว่าง หรือยังไม่มีตารางสถานะ TEST สำหรับวันนี้";
+
+      renderSummary();
+    } catch (error) {
+      if (currentRequest !== requestNumber) return;
+
+      timeSelect.replaceChildren(
+        new Option("ตรวจเวลาไม่สำเร็จ", "")
+      );
+      timeSelect.disabled = true;
+      notice.textContent =
+        (error.name === "AbortError"
+          ? "ตรวจเวลาเกิน 30 วินาที"
+          : error.message) +
+        " — ลองเปลี่ยนวันที่แล้วเลือกกลับอีกครั้ง";
+      renderSummary();
+    } finally {
+      clearTimeout(timer);
+      if (currentRequest === requestNumber) {
+        activeController = null;
+      }
+    }
+  }
+
+  branchSelect.addEventListener("change", () => clearTimes(""));
+  serviceSelect.addEventListener("change", () => {
+    clearTimes("เลือกช่างและวันที่เพื่อให้ระบบตรวจเวลา");
+  });
+  barberSelect.addEventListener("change", refreshTimes);
+  dateInput.addEventListener("change", refreshTimes);
+
+  clearTimes("");
+})();
+</script>
 <body>
 <main>
   <h1>His and Hairs Booking</h1>
