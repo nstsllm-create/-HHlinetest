@@ -815,5 +815,255 @@ start();
 
   update();
 })();
+</script> <script>
+(() => {
+  if (document.getElementById('myHoldPanel')) return;
+
+  const booking = document.getElementById('booking');
+  const status = document.getElementById('status');
+  if (!booking || !status) return;
+
+  const panel = document.createElement('section');
+  panel.id = 'myHoldPanel';
+  panel.hidden = true;
+  panel.style.cssText =
+    'margin:20px 0;padding:18px;background:#f0fdf4;' +
+    'border-radius:12px;overflow-wrap:anywhere';
+
+  const heading = document.createElement('h2');
+  heading.textContent = 'คิวทดสอบที่คุณกันไว้';
+
+  const details = document.createElement('p');
+  details.style.whiteSpace = 'pre-line';
+
+  const countdown = document.createElement('p');
+  countdown.style.fontWeight = 'bold';
+
+  const feedback = document.createElement('p');
+  feedback.setAttribute('role', 'status');
+
+  const refreshButton = document.createElement('button');
+  refreshButton.type = 'button';
+  refreshButton.textContent = 'ตรวจคิวของฉันอีกครั้ง';
+
+  panel.append(
+    heading, details, countdown, feedback, refreshButton
+  );
+  status.after(panel);
+
+  let currentHold = null;
+  let deadline = 0;
+  let loading = false;
+  let started = false;
+
+  const dateFormat = new Intl.DateTimeFormat('th-TH', {
+    timeZone: 'Asia/Bangkok',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  });
+
+  const timeFormat = new Intl.DateTimeFormat('th-TH', {
+    timeZone: 'Asia/Bangkok',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+
+  function tick() {
+    if (!currentHold) return;
+
+    const seconds = Math.max(
+      0,
+      Math.floor((deadline - performance.now()) / 1000)
+    );
+
+    if (seconds === 0) {
+      currentHold = null;
+      countdown.textContent =
+        'ครบเวลาที่แสดงแล้ว กำลังตรวจสถานะจากเซิร์ฟเวอร์…';
+      refresh();
+      return;
+    }
+
+    const minutes = Math.floor(seconds / 60);
+    const remaining = seconds % 60;
+
+    countdown.textContent =
+      'เหลือเวลา ' + minutes + ':' +
+      String(remaining).padStart(2, '0') + ' นาที';
+  }
+
+  async function refresh() {
+    if (loading) return;
+    if (!window.liff || !liff.isLoggedIn()) return;
+
+    panel.hidden = false;
+    const idToken = liff.getIDToken();
+
+    if (!idToken) {
+      currentHold = null;
+      details.textContent = '';
+      countdown.textContent = '';
+      feedback.textContent =
+        'กรุณาปิดแล้วเปิดลิงก์จาก LINE เพื่อเข้าสู่ระบบใหม่';
+      return;
+    }
+
+    loading = true;
+    refreshButton.disabled = true;
+    feedback.textContent = 'กำลังตรวจคิวของคุณ…';
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
+    const sentAt = performance.now();
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=UTF-8'
+        },
+        credentials: 'omit',
+        redirect: 'follow',
+        signal: controller.signal,
+        body: JSON.stringify({
+          action: 'my-hold-test',
+          idToken: idToken
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('เซิร์ฟเวอร์ตอบกลับไม่สำเร็จ');
+      }
+
+      const result = await response.json();
+
+      if (!result.ok) {
+        throw new Error(result.message || 'อ่านคิวไม่สำเร็จ');
+      }
+
+      const data = result.data;
+      const serverNow = Date.parse(data && data.serverNow);
+
+      if (
+        !data ||
+        data.testOnly !== true ||
+        !Number.isFinite(serverNow) ||
+        !Object.prototype.hasOwnProperty.call(data, 'hold')
+      ) {
+        throw new Error('ข้อมูลตอบกลับไม่ครบ');
+      }
+
+      if (data.hold === null) {
+        currentHold = null;
+        details.textContent = 'ไม่มีคิวทดสอบที่กำลังกันไว้';
+        countdown.textContent = '';
+        feedback.textContent = '';
+        return;
+      }
+
+      const hold = data.hold;
+      const expiry = Date.parse(hold.expiresAt);
+      const start = new Date(hold.startAt);
+      const end = new Date(hold.endAt);
+
+      if (
+        !Number.isFinite(expiry) ||
+        !Number.isFinite(start.getTime()) ||
+        !Number.isFinite(end.getTime()) ||
+        !Number.isFinite(hold.price) ||
+        typeof hold.reservationId !== 'string'
+      ) {
+        throw new Error('ข้อมูลคิวไม่ครบ');
+      }
+
+      currentHold = hold;
+
+      // นับจากเวลาของเซิร์ฟเวอร์ และหักเวลารอคำตอบ
+      deadline = performance.now() +
+        Math.max(
+          0,
+          expiry - serverNow - (performance.now() - sentAt)
+        );
+
+      details.textContent = [
+        'สาขา: ' + hold.branchName,
+        'บริการ: ' + hold.serviceName,
+        'ช่าง: ' + hold.staffName,
+        'วันที่: ' + dateFormat.format(start),
+        'เวลา: ' + timeFormat.format(start) +
+          '–' + timeFormat.format(end) + ' น.',
+        'ราคา: ' + hold.price.toLocaleString('th-TH') + ' บาท',
+        'รหัส: ' + hold.reservationId
+      ].join('\n');
+
+      feedback.textContent =
+        'คิวทดสอบ ยังไม่ได้ยืนยันนัดหมายหรือชำระเงิน';
+
+      tick();
+    } catch (error) {
+      feedback.textContent = error.name === 'AbortError'
+        ? 'รอเกิน 30 วินาที กรุณากดตรวจคิวอีกครั้ง'
+        : (error.message || 'อ่านคิวไม่สำเร็จ');
+
+      if (!currentHold) {
+        countdown.textContent = 'ยังยืนยันสถานะล่าสุดไม่ได้';
+      }
+    } finally {
+      clearTimeout(timer);
+      loading = false;
+      refreshButton.disabled = false;
+    }
+  }
+
+  refreshButton.addEventListener('click', refresh);
+
+  // เริ่มอ่านคิวเมื่อหน้าเว็บเข้าสู่ระบบสำเร็จแล้ว
+  function startWhenReady() {
+    if (started || booking.hidden) return;
+    started = true;
+    refresh();
+  }
+
+  new MutationObserver(startWhenReady).observe(booking, {
+    attributes: true,
+    attributeFilter: ['hidden']
+  });
+
+  // อ่านคิวใหม่หลังปุ่มกันคิวรายงานว่าสำเร็จ
+  const holdButton = document.getElementById('holdTestButton');
+
+  if (holdButton) {
+    let previousMessage = '';
+
+    new MutationObserver(() => {
+      const text = holdButton.parentElement.textContent;
+
+      if (
+        text.includes('กันคิวทดสอบสำเร็จ') &&
+        text !== previousMessage
+      ) {
+        previousMessage = text;
+        refresh();
+      }
+    }).observe(holdButton.parentElement, {
+      childList: true,
+      characterData: true,
+      subtree: true
+    });
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && started) refresh();
+  });
+
+  window.addEventListener('pageshow', () => {
+    if (started) refresh();
+  });
+
+  setInterval(tick, 1000);
+  startWhenReady();
+})();
 </script></body>
 </html>
