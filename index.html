@@ -1019,6 +1019,114 @@ start();
 
   refreshButton.addEventListener('click', refresh);
 
+const cancelButton = document.createElement('button');
+cancelButton.type = 'button';
+cancelButton.textContent = 'ยกเลิกคิวทดสอบ';
+cancelButton.style.background = '#dc2626';
+cancelButton.hidden = true;
+
+const cancelMessage = document.createElement('p');
+cancelMessage.setAttribute('role', 'status');
+
+panel.append(cancelButton, cancelMessage);
+
+let cancelling = false;
+
+function updateCancelButton() {
+  cancelButton.hidden =
+    !currentHold || deadline <= performance.now();
+
+  cancelButton.disabled = cancelling || loading;
+}
+
+setInterval(updateCancelButton, 1000);
+
+cancelButton.addEventListener('click', async () => {
+  if (
+    cancelling ||
+    loading ||
+    !currentHold ||
+    deadline <= performance.now()
+  ) {
+    return;
+  }
+
+  if (!window.liff || !liff.isLoggedIn()) {
+    cancelMessage.textContent = 'กรุณาเข้าสู่ระบบ LINE ใหม่';
+    return;
+  }
+
+  const idToken = liff.getIDToken();
+
+  if (!idToken) {
+    cancelMessage.textContent =
+      'กรุณาปิดแล้วเปิดลิงก์จาก LINE ใหม่';
+    return;
+  }
+
+  const reservationId = currentHold.reservationId;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+
+  cancelling = true;
+  cancelButton.disabled = true;
+  cancelMessage.textContent = 'กำลังยกเลิกคิวทดสอบ…';
+
+  try {
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain;charset=UTF-8'
+      },
+      credentials: 'omit',
+      redirect: 'follow',
+      signal: controller.signal,
+      body: JSON.stringify({
+        action: 'cancel-hold-test',
+        idToken: idToken,
+        reservationId: reservationId
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('เซิร์ฟเวอร์ตอบกลับไม่สำเร็จ');
+    }
+
+    const result = await response.json();
+
+    if (!result.ok) {
+      throw new Error(result.message || 'ยกเลิกไม่สำเร็จ');
+    }
+
+    const data = result.data;
+
+    if (
+      !data ||
+      data.testOnly !== true ||
+      data.cancelled !== true ||
+      data.reservationId !== reservationId
+    ) {
+      throw new Error('ข้อมูลตอบกลับไม่ครบ กรุณาตรวจคิวอีกครั้ง');
+    }
+
+    currentHold = null;
+    deadline = 0;
+    cancelMessage.textContent =
+      'ยกเลิกคิวทดสอบสำเร็จ กำลังโหลดหน้าใหม่…';
+
+    // โหลดสถานะและรายการเวลาใหม่จากเซิร์ฟเวอร์
+    window.location.reload();
+  } catch (error) {
+    cancelMessage.textContent = error.name === 'AbortError'
+      ? 'รอเกิน 30 วินาที ยังไม่ทราบผล กรุณากดตรวจคิวของฉันอีกครั้ง'
+      : (error.message || 'เชื่อมต่อไม่สำเร็จ กรุณาตรวจคิวอีกครั้ง');
+  } finally {
+    clearTimeout(timer);
+    cancelling = false;
+    updateCancelButton();
+  }
+});
+
   // เริ่มอ่านคิวเมื่อหน้าเว็บเข้าสู่ระบบสำเร็จแล้ว
   function startWhenReady() {
     if (started || booking.hidden) return;
