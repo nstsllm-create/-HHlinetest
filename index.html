@@ -1173,5 +1173,301 @@ cancelButton.addEventListener('click', async () => {
   setInterval(tick, 1000);
   startWhenReady();
 })();
+</script><script>
+(() => {
+  if (document.getElementById('attendanceTestPanel')) return;
+
+  const booking = document.getElementById('booking');
+  if (!booking) return;
+
+  const panel = document.createElement('section');
+  panel.id = 'attendanceTestPanel';
+  panel.hidden = true;
+  panel.style.cssText =
+    'margin:24px 0;padding:18px;background:#eff6ff;' +
+    'border-radius:12px';
+
+  const heading = document.createElement('h2');
+  heading.textContent = 'เช็กอินช่าง — สำหรับทดสอบ';
+
+  const note = document.createElement('p');
+  note.className = 'note';
+  note.textContent =
+    'ใช้รหัส TEST_ATTENDANCE_001 ' +
+    'ยังไม่นำไปคิดค่าแรงหรือเปิดคิวของช่างจริง';
+
+  const branchLabel = document.createElement('label');
+  branchLabel.htmlFor = 'attendanceTestBranch';
+  branchLabel.textContent = 'สาขาที่เข้าทำงาน';
+
+  const branch = document.createElement('select');
+  branch.id = 'attendanceTestBranch';
+
+  const shiftLabel = document.createElement('label');
+  shiftLabel.htmlFor = 'attendanceTestShift';
+  shiftLabel.textContent = 'กะทำงาน';
+
+  const shift = document.createElement('select');
+  shift.id = 'attendanceTestShift';
+  shift.add(new Option('09:00–20:00 น.', 'DAY'));
+  shift.add(new Option('11:00–22:00 น.', 'LATE'));
+
+  const details = document.createElement('p');
+  details.style.whiteSpace = 'pre-line';
+
+  const message = document.createElement('p');
+  message.setAttribute('role', 'status');
+
+  const checkIn = document.createElement('button');
+  checkIn.type = 'button';
+  checkIn.textContent = 'เช็กอินทดสอบ';
+
+  const checkOut = document.createElement('button');
+  checkOut.type = 'button';
+  checkOut.textContent = 'เช็กเอาต์ทดสอบ';
+  checkOut.style.background = '#dc2626';
+
+  const refresh = document.createElement('button');
+  refresh.type = 'button';
+  refresh.textContent = 'ตรวจสถานะเช็กอิน';
+  refresh.style.background = '#475569';
+
+  panel.append(
+    heading, note,
+    branchLabel, branch,
+    shiftLabel, shift,
+    details, message,
+    checkIn, checkOut, refresh
+  );
+
+  booking.before(panel);
+
+  let attendance = null;
+  let known = false;
+  let busy = false;
+  let started = false;
+  let branches = [];
+
+  function formatTime(value) {
+    return new Intl.DateTimeFormat('th-TH', {
+      timeZone: 'Asia/Bangkok',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).format(new Date(value));
+  }
+
+  function updateButtons() {
+    const hasRecord = attendance !== null;
+
+    branch.disabled = busy || !known || hasRecord;
+    shift.disabled = busy || !known || hasRecord;
+    refresh.disabled = busy;
+
+    checkIn.hidden = known && hasRecord;
+    checkIn.disabled =
+      busy || !known || hasRecord || !branch.value;
+
+    checkOut.hidden =
+      !known || !attendance || attendance.status !== 'TEST_IN';
+    checkOut.disabled = busy;
+  }
+
+  function showData(data) {
+    if (
+      !data ||
+      data.testOnly !== true ||
+      data.staffId !== 'TEST_ATTENDANCE_001' ||
+      !Array.isArray(data.branches) ||
+      !Object.prototype.hasOwnProperty.call(data, 'attendance')
+    ) {
+      throw new Error('ข้อมูลตอบกลับไม่ครบ');
+    }
+
+    const record = data.attendance;
+
+    if (
+      record !== null &&
+      (
+        !['TEST_IN', 'TEST_OUT'].includes(record.status) ||
+        typeof record.attendanceId !== 'string' ||
+        !Number.isFinite(Date.parse(record.checkedInAt)) ||
+        !Number.isFinite(Date.parse(record.shiftStartAt)) ||
+        !Number.isFinite(Date.parse(record.shiftEndAt)) ||
+        (
+          record.status === 'TEST_OUT' &&
+          !Number.isFinite(Date.parse(record.checkedOutAt))
+        )
+      )
+    ) {
+      throw new Error('ข้อมูลสถานะเช็กอินไม่ครบ');
+    }
+
+    const previousBranch = branch.value;
+    branches = data.branches;
+
+    branch.replaceChildren(
+      new Option('กรุณาเลือกสาขา', '')
+    );
+
+    branches.forEach(item => {
+      branch.add(new Option(item.name, item.id));
+    });
+
+    attendance = record;
+    known = true;
+
+    if (!attendance) {
+      branch.value = previousBranch;
+      details.textContent = 'วันนี้ยังไม่ได้เช็กอินทดสอบ';
+      return;
+    }
+
+    branch.value = attendance.branchId;
+
+    const startHour = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Bangkok',
+      hour: '2-digit',
+      hour12: false
+    }).format(new Date(attendance.shiftStartAt));
+
+    shift.value = startHour === '11' ? 'LATE' : 'DAY';
+
+    const selectedBranch = branches.find(
+      item => item.id === attendance.branchId
+    );
+
+    details.textContent = [
+      'รหัสช่าง: ' + data.staffId,
+      'สาขา: ' + (
+        selectedBranch
+          ? selectedBranch.name
+          : attendance.branchId
+      ),
+      'วันที่: ' + attendance.workDate,
+      'กะ: ' + formatTime(attendance.shiftStartAt) +
+        '–' + formatTime(attendance.shiftEndAt) + ' น.',
+      'เช็กอิน: ' + formatTime(attendance.checkedInAt) + ' น.',
+      attendance.checkedOutAt
+        ? 'เช็กเอาต์: ' +
+          formatTime(attendance.checkedOutAt) + ' น.'
+        : 'ยังไม่ได้เช็กเอาต์',
+      'สถานะ: ' + (
+        attendance.status === 'TEST_IN'
+          ? 'เช็กอินทดสอบแล้ว'
+          : 'เช็กเอาต์ทดสอบแล้ว'
+      )
+    ].join('\n');
+  }
+
+  async function send(action) {
+    if (busy) return;
+
+    panel.hidden = false;
+    busy = true;
+    updateButtons();
+    message.textContent = 'กำลังตรวจและบันทึกกับเซิร์ฟเวอร์…';
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
+
+    try {
+      if (!window.liff || !liff.isLoggedIn()) {
+        throw new Error('กรุณาเข้าสู่ระบบ LINE ใหม่');
+      }
+
+      const idToken = liff.getIDToken();
+      if (!idToken) {
+        throw new Error('กรุณาปิดแล้วเปิดลิงก์จาก LINE ใหม่');
+      }
+
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=UTF-8'
+        },
+        credentials: 'omit',
+        redirect: 'follow',
+        signal: controller.signal,
+        body: JSON.stringify({
+          action: action,
+          idToken: idToken,
+          branchId: branch.value,
+          shift: shift.value,
+          attendanceId: attendance
+            ? attendance.attendanceId
+            : ''
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('เซิร์ฟเวอร์ตอบกลับไม่สำเร็จ');
+      }
+
+      const result = await response.json();
+
+      if (!result.ok) {
+        throw new Error(result.message || 'ทำรายการไม่สำเร็จ');
+      }
+
+      showData(result.data);
+
+      message.textContent =
+        action === 'attendance-test-in'
+          ? 'บันทึกเช็กอินทดสอบสำเร็จ'
+          : action === 'attendance-test-out'
+            ? 'บันทึกเช็กเอาต์ทดสอบสำเร็จ'
+            : 'ตรวจสถานะสำเร็จ';
+    } catch (error) {
+      known = false;
+      message.textContent = error.name === 'AbortError'
+        ? 'รอเกิน 30 วินาที ยังไม่ทราบผล กรุณากดตรวจสถานะเช็กอิน'
+        : (error.message || 'ทำรายการไม่สำเร็จ') +
+          ' — กรุณากดตรวจสถานะเช็กอินอีกครั้ง';
+    } finally {
+      clearTimeout(timer);
+      busy = false;
+      updateButtons();
+    }
+  }
+
+  branch.addEventListener('change', updateButtons);
+
+  checkIn.addEventListener('click', () => {
+    if (!known || attendance || !branch.value) return;
+    send('attendance-test-in');
+  });
+
+  checkOut.addEventListener('click', () => {
+    if (!known || !attendance ||
+        attendance.status !== 'TEST_IN') return;
+    send('attendance-test-out');
+  });
+
+  refresh.addEventListener('click', () => {
+    send('attendance-test-status');
+  });
+
+  function startWhenReady() {
+    if (started || booking.hidden) return;
+    started = true;
+    send('attendance-test-status');
+  }
+
+  new MutationObserver(startWhenReady).observe(booking, {
+    attributes: true,
+    attributeFilter: ['hidden']
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && started) {
+      send('attendance-test-status');
+    }
+  });
+
+  updateButtons();
+  startWhenReady();
+})();
 </script></body>
 </html>
