@@ -1278,7 +1278,8 @@ cancelButton.addEventListener('click', async () => {
     if (
       !data ||
       data.testOnly !== true ||
-      data.staffId !== 'TEST_ATTENDANCE_001' ||
+            typeof data.staffId !== 'string' ||
+      data.staffId.trim() === '' ||
       !Array.isArray(data.branches) ||
       !Object.prototype.hasOwnProperty.call(data, 'attendance')
     ) {
