@@ -1205,9 +1205,10 @@ cancelButton.addEventListener('click', async () => {
 
   const note = document.createElement('p');
   note.className = 'note';
-  note.textContent =
-    'ใช้รหัส TEST_ATTENDANCE_001 ' +
-    'ยังไม่นำไปคิดค่าแรงหรือเปิดคิวของช่างจริง';
+    note.textContent =
+    'ทดสอบเช็กอินด้วยบัญชี LINE ที่ผูกกับรหัสช่าง ' +
+    'การเช็กอินมีผลต่อเวลาว่างในระบบทดสอบเท่านั้น ' +
+    'ยังไม่นำไปคำนวณค่าแรงหรือรับจองจริง';
 
   const branchLabel = document.createElement('label');
   branchLabel.htmlFor = 'attendanceTestBranch';
