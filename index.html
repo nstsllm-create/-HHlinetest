@@ -592,11 +592,24 @@ start();
         throw new Error(result.message || "ยืนยันบัญชีไม่สำเร็จ");
       }
 
+            const userId = result.data.userId;
+
+      if (
+        typeof userId !== "string" ||
+        !/^U[0-9a-f]{32}$/i.test(userId)
+      ) {
+        throw new Error("ไม่พบรหัสบัญชี กรุณาตรวจเวอร์ชัน Apps Script");
+      }
+
+      message.style.whiteSpace = "pre-line";
+      message.style.overflowWrap = "anywhere";
+      message.style.userSelect = "text";
+
       message.textContent =
-        "เซิร์ฟเวอร์ยืนยันบัญชีสำเร็จ" +
-        (result.data.displayName
-          ? ": " + result.data.displayName : "") +
-        " — ยังไม่ได้สร้างคิว";
+        "เซิร์ฟเวอร์ยืนยันบัญชีสำเร็จ\n" +
+        "ชื่อ LINE: " + (result.data.displayName || "-") +
+        "\nรหัสบัญชี LINE: " + userId +
+        "\nยังไม่ได้สร้างคิว";
     } catch (error) {
       message.textContent =
         error.name === "AbortError"
