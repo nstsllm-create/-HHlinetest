@@ -187,7 +187,14 @@ window.addEventListener("DOMContentLoaded", () => {
       });
 
       timeSelect.disabled = slots.length === 0;
-      notice.textContent = slots.length
+            notice.textContent = slots.length
+        ? "ตรวจพบ " + slots.length +
+          " เวลาเริ่มที่เลือกได้ ยังไม่ได้กันคิว"
+        : (
+            typeof data.message === "string" && data.message.trim()
+              ? data.message
+              : "ไม่มีเวลาว่างที่เลือกได้ กรุณาตรวจสถานะเช็กอินและตารางงาน"
+          );
         ? "ตรวจพบ " + slots.length +
           " เวลาเริ่มที่เลือกได้ ยังไม่ได้กันคิว"
         : "ไม่พบเวลาว่าง หรือยังไม่มีตารางสถานะ TEST สำหรับวันนี้";
