@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>His and Hairs Staff Check-in</title>
+<style>
+*{box-sizing:border-box}body{margin:0;padding:20px;background:#f3f4f6;color:#222;font-family:system-ui,sans-serif}main{max-width:520px;margin:20px auto;padding:24px;background:#fff;border-radius:18px}h1{margin-top:0}.note{color:#666;line-height:1.6}.ok{color:#15803d}.error{color:#b91c1c}label{display:block;margin-top:16px;font-weight:600}select,button{width:100%;padding:13px;margin-top:7px;border:1px solid #d1d5db;border-radius:10px;font:inherit}button{border:0;background:#06c755;color:#fff}button.out{background:#dc2626}button.refresh{background:#475569}.card{padding:16px;background:#f8fafc;border-radius:12px;margin:16px 0;white-space:pre-line}
+</style></head>
+<body><main>
+<h1>เช็กอินเข้าทำงาน</h1>
+<p id="status">กำลังเชื่อมต่อ LINE…</p>
+<p class="note">สำหรับช่างที่ได้รับอนุญาตเท่านั้น บัญชีนี้ต้องเป็นบัญชีที่ผูกกับรหัสช่างไว้แล้ว</p>
+<section id="app" hidden>
+<label for="branch">สาขาที่เข้าทำงานวันนี้</label><select id="branch"><option value="">กำลังโหลด…</option></select>
+<label for="shift">กะทำงาน</label><select id="shift"><option value="DAY">09:00–20:00 น.</option><option value="LATE">11:00–22:00 น.</option></select>
+<div id="details" class="card">กำลังตรวจสถานะ…</div>
+<button id="in">เช็กอินเข้าทำงาน</button>
+<button id="out" class="out" hidden>เช็กเอาต์</button>
+<button id="refresh" class="refresh">ตรวจสถานะอีกครั้ง</button>
+<p id="message" role="status"></p>
+</section>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script>
+const LIFF_ID='2007513533-R2eJcQzQ';
+const API='https://script.google.com/macros/s/AKfycbzF1clYVoU6fhE7qOsv1oOs-XS-_G_aAto-PefaQcCjbMR6cDpjrYCQGexi/exec';
+const $=id=>document.getElementById(id);let attendance=null,busy=false,known=false;
+async function call(action){const token=liff.getIDToken();if(!token)throw Error('ไม่พบการยืนยัน LINE กรุณาปิดแล้วเปิดลิงก์ LIFF ใหม่');const r=await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},credentials:'omit',body:JSON.stringify({action,idToken:token,branchId:$('branch').value,shift:$('shift').value,attendanceId:attendance?attendance.attendanceId:''})});if(!r.ok)throw Error('เซิร์ฟเวอร์ตอบกลับไม่สำเร็จ');const x=await r.json();if(!x.ok)throw Error(x.message||'ทำรายการไม่สำเร็จ');return x.data}
+function render(d){if(!d||!Array.isArray(d.branches)||!Object.prototype.hasOwnProperty.call(d,'attendance'))throw Error('ข้อมูลสถานะไม่ครบ');const prev=$('branch').value;$('branch').replaceChildren(new Option('เลือกสาขา',''));d.branches.forEach(x=>$('branch').add(new Option(x.name,x.id)));attendance=d.attendance;known=true;if(attendance){$('branch').value=attendance.branchId;$('shift').value=new Date(attendance.shiftStartAt).getHours()===11?'LATE':'DAY';$('details').textContent='รหัสช่าง: '+d.staffId+'\nวันที่: '+attendance.workDate+'\nสถานะ: '+(attendance.status==='TEST_IN'?'เช็กอินแล้ว':'เช็กเอาต์แล้ว');$('in').hidden=true;$('out').hidden=attendance.status!=='TEST_IN'}else{$('branch').value=prev;$('details').textContent='วันนี้ยังไม่ได้เช็กอิน';$('in').hidden=false;$('out').hidden=true}}
+async function refresh(action='attendance-test-status'){if(busy)return;busy=true;$('message').textContent='กำลังตรวจสอบ…';try{render(await call(action));$('message').textContent=action==='attendance-test-in'?'เช็กอินสำเร็จ':action==='attendance-test-out'?'เช็กเอาต์สำเร็จ':'สถานะล่าสุด'}catch(e){$('message').textContent=e.message;$('message').className='error'}finally{busy=false}}
+async function boot(){try{await liff.init({liffId:LIFF_ID});if(!liff.isLoggedIn())throw Error('กรุณาเปิดลิงก์นี้ผ่าน LINE และเข้าสู่ระบบก่อน');$('app').hidden=false;await refresh()}catch(e){$('status').textContent=e.message;$('status').className='error'}}
+$('in').onclick=()=>refresh('attendance-test-in');$('out').onclick=()=>refresh('attendance-test-out');$('refresh').onclick=()=>refresh();boot();
+</script></main></body></html>
