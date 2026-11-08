@@ -5,12 +5,13 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>His and Hairs Staff ID</title>
 <style>
-*{box-sizing:border-box}body{margin:0;padding:20px;background:#f3f4f6;color:#222;font-family:system-ui,sans-serif}main{max-width:520px;margin:20px auto;padding:24px;background:#fff;border-radius:18px}h1{margin-top:0}.note{color:#666;line-height:1.6}.id{padding:16px;background:#eff6ff;border-radius:12px;word-break:break-all;font-family:monospace;font-size:16px}.error{color:#b91c1c}button{width:100%;padding:13px;border:0;border-radius:10px;background:#06c755;color:#fff;font:inherit}
+*{box-sizing:border-box}body{margin:0;padding:20px;background:#f3f4f6;color:#222;font-family:system-ui,sans-serif}main{max-width:520px;margin:20px auto;padding:24px;background:#fff;border-radius:18px}h1{margin-top:0}.note{color:#666;line-height:1.6}.id{padding:16px;background:#eff6ff;border-radius:12px;word-break:break-all;font-family:monospace;font-size:16px}.error{color:#b91c1c}button{width:100%;padding:13px;border:0;border-radius:10px;background:#06c755;color:#fff;font:inherit;margin-top:10px}
 </style>
 </head>
 <body><main>
 <h1>รหัส LINE พนักงาน</h1>
 <p id="status">กำลังเชื่อมต่อ LINE…</p>
+<p id="hint" class="note">กรุณาเปิดลิงก์นี้ผ่านปุ่มเมนูใน LINE หรือผ่านลิงก์ LIFF โดยตรง</p>
 <button id="login" hidden>เข้าสู่ระบบ LINE</button>
 <section id="result" hidden>
 <p class="note">ส่งเฉพาะรหัสด้านล่างให้ผู้ดูแลระบบเพื่อผูกกับรหัสช่าง ห้ามส่ง Token หรือรหัสผ่าน</p>
@@ -25,11 +26,12 @@ const $=id=>document.getElementById(id);
 async function boot(){
  try{
   await liff.init({liffId:LIFF_ID});
-  if(!liff.isLoggedIn()){$('status').textContent='กรุณาเข้าสู่ระบบ LINE';$('login').hidden=false;return}
-  const token=liff.getDecodedIDToken();
-  const id=token&&token.sub;
-  if(!id)throw Error('ไม่พบ LINE User ID กรุณาปิดแล้วเปิดลิงก์จาก LINE ใหม่');
-  $('status').textContent='ตรวจสอบสำเร็จ';$('userId').textContent=id;$('name').textContent=token.name?'ชื่อบัญชี LINE: '+token.name:'';$('result').hidden=false;
+  if(!liff.isLoggedIn()){$('status').textContent='ยังไม่ได้เข้าสู่ระบบ LINE';$('login').hidden=false;return}
+  let profile=null;try{profile=await liff.getProfile()}catch(e){}
+  const decoded=typeof liff.getDecodedIDToken==='function'?liff.getDecodedIDToken():null;
+  const id=(profile&&profile.userId)||(decoded&&decoded.sub);
+  if(!id)throw Error('ไม่พบ LINE User ID กรุณาเปิดด้วยลิงก์ LIFF โดยตรง');
+  $('status').textContent='ตรวจสอบสำเร็จ';$('hint').hidden=true;$('userId').textContent=id;$('name').textContent=(profile&&profile.displayName)?'ชื่อบัญชี LINE: '+profile.displayName:(decoded&&decoded.name)?'ชื่อบัญชี LINE: '+decoded.name:'';$('result').hidden=false;
  }catch(e){$('status').textContent=e.message||'เชื่อมต่อไม่สำเร็จ';$('status').className='error'}
 }
 $('login').onclick=()=>liff.login();boot();
