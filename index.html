@@ -5,7 +5,30 @@
 const LIFF_ID='2007513533-R2eJcQzQ',API='https://script.google.com/macros/s/AKfycbzF1clYVoU6fhE7qOsv1oOs-XS-_G-fYwtJ-G_aAto-PefaQcCjbMR6cDpjrYCQGexi/exec',DRAFT='hh_booking_draft_v3',$=id=>document.getElementById(id),S={catalog:null,config:null,slots:[],slipUploaded:false};
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok'}).format(new Date()),pay=()=>document.querySelector('input[name="paymentMethod"]:checked')?.value||'',svc=()=>S.catalog?.services.find(x=>x.id===$('service').value),msg=(t,e=false)=>{$('notice').textContent=t;$('notice').className=e?'note error':'note'};
 async function get(u){const r=await fetch(u);const j=await r.json();if(!j.ok){const e=Error(j.message||'ดำเนินการไม่สำเร็จ');e.code=j.code||'REQUEST_FAILED';throw e}return j.data}async function post(b){const r=await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify(b)}),j=await r.json();if(!j.ok){const e=Error(j.message||'ดำเนินการไม่สำเร็จ');e.code=j.code||'REQUEST_FAILED';throw e}return j.data}function isLineAuthError(e){return e&&(['LINE_AUTH_FAILED','ROLE_RESOLUTION_FAILED'].includes(e.code)||/ยืนยันบัญชีไม่สำเร็จ|เข้าสู่ระบบใหม่/.test(e.message||''))}function startLineLogin(){try{save()}catch(_){}$('status').textContent='กำลังเปิดการเข้าสู่ระบบ LINE ใหม่…';$('status').className='error';try{if(liff.isLoggedIn())liff.logout()}catch(_){}setTimeout(()=>liff.login({redirectUri:location.href}),150)}async function postAuth(body){let token='';try{token=liff.getIDToken()||''}catch(_){}if(!liff.isLoggedIn()||!token){startLineLogin();const e=Error('กำลังเปิดการเข้าสู่ระบบ LINE ใหม่ กรุณารอสักครู่');e.code='LINE_AUTH_REQUIRED';throw e}try{return await post(Object.assign({},body,{idToken:token}))}catch(e){if(isLineAuthError(e)){startLineLogin();const x=Error('เซสชัน LINE หมดอายุ ระบบกำลังให้เข้าสู่ระบบใหม่');x.code='LINE_AUTH_REFRESH_REQUIRED';throw x}throw e}}
-async function postBookingSafe(payload){try{return await postAuth(payload)}catch(e){if(['BOOKING_FAILED','BOOKING_STATUS_UNKNOWN'].includes(e.code)){try{const mine=await postAuth({action:'my-bookings'});const hit=(mine.bookings||[]).find(x=>x.requestId===payload.requestId);if(hit){const qrTarget='https://nstsllm-create.github.io/-HHlinetest/staff-work.html?token='+encodeURIComponent(hit.reservationId);return{duplicate:true,recovered:true,booking:hit,workToken:hit.reservationId,workQrUrl:'https://quickchart.io/qr?size=320&text='+encodeURIComponent(qrTarget)}}}catch(_){}e.code='BOOKING_STATUS_UNKNOWN';e.message='ระบบกำลังตรวจสอบรายการจอง กรุณาอย่ากดซ้ำ แล้วตรวจสอบรายการจองอีกครั้ง'}throw e}}
+async function postBookingSafe(payload){
+  try{return await postAuth(payload)}catch(e){
+    if(!['BOOKING_FAILED','BOOKING_STATUS_UNKNOWN'].includes(e.code))throw e;
+    const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    for(const delay of [1200,2500,4000]){
+      try{
+        await wait(delay);
+        const mine=await postAuth({action:'my-bookings'});
+        const list=Array.isArray(mine?.bookings)?mine.bookings:[];
+        const hit=list.find(x=>String(x.requestId||'')===String(payload.requestId)) ||
+          list.find(x=>x.branchId===payload.branchId&&x.serviceId===payload.serviceId&&
+            String(x.startAt||'').startsWith(String(payload.date))&&
+            String(x.startAt||'').includes('T'+String(payload.time)+':'));
+        if(hit&&hit.reservationId){
+          const qrTarget='https://nstsllm-create.github.io/-HHlinetest/staff-work.html?token='+encodeURIComponent(hit.reservationId);
+          return{duplicate:true,recovered:true,booking:hit,workToken:hit.reservationId,workQrUrl:'https://quickchart.io/qr?size=320&text='+encodeURIComponent(qrTarget)};
+        }
+      }catch(_){}
+    }
+    e.code='BOOKING_STATUS_UNKNOWN';
+    e.message='ระบบบันทึกคำขอแล้วแต่ยังดึงเลขที่จองกลับมาไม่ได้ กรุณารอสักครู่แล้วกด “ตรวจสอบรายการจอง” โดยห้ามกดยืนยันซ้ำ';
+    throw e;
+  }
+}
 function requestId(){let x=sessionStorage.getItem('hh_booking_request_id');if(!x){x='BOOK-'+crypto.randomUUID();sessionStorage.setItem('hh_booking_request_id',x)}return x}function save(){sessionStorage.setItem(DRAFT,JSON.stringify({branch:$('branch').value,service:$('service').value,date:$('date').value,time:$('time').value,payment:pay(),confirmed:$('paymentConfirm').checked,slipUploaded:S.slipUploaded}))}function clear(){sessionStorage.removeItem(DRAFT);sessionStorage.removeItem('hh_booking_request_id')}
 function update(){const needSlip=pay()==='TRANSFER';$('book').disabled=!$('time').value||!pay()||!$('paymentConfirm').checked||!S.config?.enabled||(needSlip&&!S.slipUploaded)}function reset(){['time'].forEach(id=>{$(id).disabled=true;$(id).replaceChildren(new Option('เลือกข้อมูลก่อน',''))});$('paymentChoice').hidden=true;$('transferInfo').hidden=true;$('book').disabled=true;S.slots=[];S.slipUploaded=false}
 function branchChanged(){reset();const a=S.catalog.services.filter(x=>x.branchId===$('branch').value);$('service').replaceChildren(new Option('เลือกบริการ',''),...a.map(x=>new Option(x.name+' — '+Number(x.price).toLocaleString('th-TH')+' บาท',x.id)));$('service').disabled=!a.length;save()}function serviceChanged(){reset();$('date').disabled=!svc();save()}
